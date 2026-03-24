@@ -11,7 +11,6 @@ import pytest
 from mailbridge_mcp.config import AccountConfig, ImapConfig, SmtpConfig
 from mailbridge_mcp.tools_read import (
     get_message,
-    get_thread,
     list_accounts,
     list_folders,
     list_messages,
@@ -27,7 +26,8 @@ from mailbridge_mcp.tools_write import (
 # imapclient ENVELOPE is a namedtuple-like object
 Envelope = namedtuple(
     "Envelope",
-    ["date", "subject", "from_", "sender", "reply_to", "to", "cc", "bcc", "in_reply_to", "message_id"],
+    ["date", "subject", "from_", "sender", "reply_to",
+     "to", "cc", "bcc", "in_reply_to", "message_id"],
 )
 
 
@@ -109,7 +109,6 @@ async def test_list_messages_pagination(
     accounts: dict[str, AccountConfig], monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setenv("IMAP_TIMEOUT", "5")
-    env = _make_envelope()
 
     def mock_imap_op(account, op, *args, **kwargs):
         # Simulate the inner _op function's return value

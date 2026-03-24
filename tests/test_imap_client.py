@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from mailbridge_mcp.config import AccountConfig, ImapConfig, SmtpConfig
-from mailbridge_mcp.imap_client import imap_connection, run_imap, get_uidvalidity
+from mailbridge_mcp.imap_client import get_uidvalidity, imap_connection, run_imap
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def test_imap_connection_logout_on_exception(account: AccountConfig):
         mock_cls.return_value = mock_client
 
         with pytest.raises(RuntimeError):
-            with imap_connection(account) as client:
+            with imap_connection(account) as _client:
                 raise RuntimeError("boom")
 
         mock_client.logout.assert_called_once()
@@ -56,7 +56,7 @@ def test_imap_connection_swallows_logout_error(account: AccountConfig):
         mock_client.logout.side_effect = OSError("already closed")
         mock_cls.return_value = mock_client
 
-        with imap_connection(account) as client:
+        with imap_connection(account) as _client:
             pass  # should not raise despite logout failure
 
 
