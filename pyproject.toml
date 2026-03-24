@@ -6,6 +6,7 @@ description = "MCP server bridging Claude.ai to IMAP/SMTP email accounts"
 
 dependencies = [
     "mcp[cli]>=1.9",
+    "fastmcp>=2.0",
     "imapclient>=3.0",
     "aiosmtplib>=3.0",
     "pydantic>=2.7",
@@ -46,3 +47,8 @@ select = ["E", "F", "I", "N", "W", "UP"]
 python_version = "3.13"
 strict = true
 warn_return_any = true
+disable_error_code = ["import-untyped"]
+
+[[tool.mypy.overrides]]
+module = ["imapclient", "imapclient.*", "nh3", "aiosmtplib", "aiosmtplib.*"]
+ignore_missing_imports = true
