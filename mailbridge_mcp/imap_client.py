@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Any, Callable
+from typing import Any
 
 import imapclient
 
@@ -12,7 +12,7 @@ from mailbridge_mcp.config import AccountConfig
 
 
 @contextmanager
-def imap_connection(account: AccountConfig) -> Generator[Any, None, None]:
+def imap_connection(account: AccountConfig) -> Generator[Any]:
     """Open an IMAP connection, yield the client, then close. One per tool call."""
     client = imapclient.IMAPClient(
         host=account.imap.host,

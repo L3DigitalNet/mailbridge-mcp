@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from pathlib import Path
@@ -19,6 +18,14 @@ from starlette.responses import JSONResponse
 
 from mailbridge_mcp.auth import BearerAuthMiddleware
 from mailbridge_mcp.config import AccountConfig, Settings, load_accounts
+from mailbridge_mcp.tools_read import (
+    get_message,
+    get_thread,
+    list_accounts,
+    list_folders,
+    list_messages,
+    search_messages,
+)
 
 log = structlog.get_logger()
 
@@ -60,11 +67,11 @@ async def app_lifespan(server: Any) -> Any:
     config_path = Path(
         os.getenv("ACCOUNTS_CONFIG_PATH", settings.accounts_config_path)
     )
-    accounts = load_accounts(config_path)
+    accounts_list = load_accounts(config_path)
     accounts_map: dict[str, AccountConfig] = {}
 
     loop = asyncio.get_running_loop()
-    for account in accounts:
+    for account in accounts_list:
         log.info("Verifying account connectivity", account_id=account.id)
         await loop.run_in_executor(None, _verify_account, account)
         accounts_map[account.id] = account
@@ -83,24 +90,100 @@ mcp = FastMCP(
 
 
 async def health_check(request: Request) -> JSONResponse:
-    # Return per-account connectivity status
-    # At health-check time, all accounts were verified at startup; a full
-    # NOOP re-check is deferred to v0.2. For now, report startup-verified state.
     return JSONResponse({"status": "ok"})
 
 
-# --- Tools ---
+# --- Read tools ---
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def imap_list_accounts(ctx: Context) -> str:
     """List all configured email accounts with their IDs and labels."""
-    accounts: dict[str, AccountConfig] = ctx.lifespan_context["accounts"]
-    result = [
-        {"id": a.id, "label": a.label, "default_from": a.default_from}
-        for a in accounts.values()
-    ]
-    return json.dumps(result, indent=2)
+    return await list_accounts(ctx.lifespan_context["accounts"])
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def imap_list_folders(account_id: str, ctx: Context) -> str:
+    """List all IMAP folders/mailboxes for an account."""
+    return await list_folders(ctx.lifespan_context["accounts"], account_id)
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def imap_list_messages(
+    account_id: str,
+    ctx: Context,
+    folder: str = "INBOX",
+    limit: int = 20,
+    offset: int = 0,
+    unread_only: bool = False,
+    sort_by: str = "date_desc",
+    response_format: str = "markdown",
+) -> str:
+    """List messages in a folder with summary metadata. Supports pagination."""
+    return await list_messages(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, limit, offset, unread_only, sort_by, response_format,
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def imap_get_message(
+    account_id: str,
+    folder: str,
+    uid: int,
+    ctx: Context,
+    prefer_plain: bool = True,
+    include_headers: bool = False,
+    response_format: str = "json",
+) -> str:
+    """Fetch the full content of a single message by UID."""
+    return await get_message(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, uid, prefer_plain, include_headers, response_format,
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def imap_search_messages(
+    account_id: str,
+    ctx: Context,
+    folder: str = "INBOX",
+    query: str = "",
+    from_address: str | None = None,
+    to_address: str | None = None,
+    subject: str | None = None,
+    since_date: str | None = None,
+    before_date: str | None = None,
+    is_unread: bool | None = None,
+    is_flagged: bool | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    response_format: str = "markdown",
+) -> str:
+    """Search messages using IMAP SEARCH criteria."""
+    return await search_messages(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, query, from_address, to_address, subject,
+        since_date, before_date, is_unread, is_flagged, limit, offset,
+        response_format,
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def imap_get_thread(
+    account_id: str,
+    folder: str,
+    uid: int,
+    ctx: Context,
+    limit: int = 20,
+    offset: int = 0,
+    response_format: str = "markdown",
+) -> str:
+    """Fetch all messages in a thread via Message-ID / References headers."""
+    return await get_thread(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, uid, limit, offset, response_format,
+    )
 
 
 # --- App creation ---
