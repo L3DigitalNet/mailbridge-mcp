@@ -1,0 +1,42 @@
+{
+  "project": "mailbridge-mcp",
+  "last_analysis": "2026-03-24",
+  "profile": "generic-python-fastmcp",
+  "tests_total": 96,
+  "tests_passing": 96,
+  "tests_failing": 0,
+  "coverage_overall": 53,
+  "categories": {
+    "unit": {"tests": 78, "status": "passing"},
+    "integration": {"tests": 0, "status": "not_started", "reason": "Requires ASGI TestClient with lifespan — deferred"},
+    "contract": {"tests": 14, "status": "passing"},
+    "security": {"tests": 4, "status": "partial", "note": "Auth tests cover token validation; SMTP rate limiting tested in unit"},
+    "e2e": {"tests": 0, "status": "not_applicable", "reason": "Design spec: manual smoke tests only, no live IMAP in CI"}
+  },
+  "coverage_by_module": {
+    "config.py": 100,
+    "imap_client.py": 100,
+    "smtp_client.py": 98,
+    "auth.py": 100,
+    "formatters.py": 100,
+    "models.py": 0,
+    "server.py": 63,
+    "tools_read.py": 31,
+    "tools_write.py": 48
+  },
+  "known_gaps": [
+    {"priority": "medium", "file": "tools_read.py", "category": "unit", "description": "get_message, search_messages, get_thread inner IMAP operations need happy-path tests with full mock chains"},
+    {"priority": "medium", "file": "tools_write.py", "category": "unit", "description": "reply_tool, move_message happy-path IMAP+SMTP integration untested"},
+    {"priority": "low", "file": "models.py", "category": "unit", "description": "Pydantic field constraints (ge, le, Literal) not directly tested — validated indirectly via contract tests"},
+    {"priority": "low", "file": "server.py", "category": "integration", "description": "Lifespan startup, health check via HTTP, tool dispatch through MCP layer untested"},
+    {"priority": "low", "file": "tools_write.py", "category": "security", "description": "Rate limiter shared counter between send+reply not verified in integration"}
+  ],
+  "source_bugs_fixed": [],
+  "history": [
+    {
+      "date": "2026-03-24",
+      "action": "convergence_loop",
+      "summary": "Filled 12 of 18 gaps in 1 iteration. Added test_auth (7), test_formatters (16), test_contracts (14), test_helpers (17). Coverage 37% → 53%. No source bugs found."
+    }
+  ]
+}
