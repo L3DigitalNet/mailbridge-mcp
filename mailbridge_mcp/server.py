@@ -26,6 +26,13 @@ from mailbridge_mcp.tools_read import (
     list_messages,
     search_messages,
 )
+from mailbridge_mcp.tools_write import (
+    delete_message,
+    move_message,
+    reply_tool,
+    send_email_tool,
+    set_flags,
+)
 
 log = structlog.get_logger()
 
@@ -183,6 +190,99 @@ async def imap_get_thread(
     return await get_thread(
         ctx.lifespan_context["accounts"],
         account_id, folder, uid, limit, offset, response_format,
+    )
+
+
+# --- Write tools ---
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False),
+)
+async def imap_send_email(
+    account_id: str,
+    to: list[str],
+    subject: str,
+    body: str,
+    ctx: Context,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
+    reply_to: str | None = None,
+) -> str:
+    """Compose and send a new email via SMTP."""
+    return await send_email_tool(
+        ctx.lifespan_context["accounts"],
+        account_id, to, subject, body, cc, bcc, reply_to,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False),
+)
+async def imap_reply(
+    account_id: str,
+    folder: str,
+    uid: int,
+    body: str,
+    ctx: Context,
+    reply_all: bool = False,
+    include_original: bool = True,
+) -> str:
+    """Reply to an existing message, preserving threading headers."""
+    return await reply_tool(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, uid, body, reply_all, include_original,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True),
+)
+async def imap_move_message(
+    account_id: str,
+    folder: str,
+    uid: int,
+    destination_folder: str,
+    ctx: Context,
+) -> str:
+    """Move a message to a different folder."""
+    return await move_message(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, uid, destination_folder,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True),
+)
+async def imap_delete_message(
+    account_id: str,
+    folder: str,
+    uid: int,
+    ctx: Context,
+) -> str:
+    """Move a message to Trash (does NOT permanently expunge)."""
+    return await delete_message(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, uid,
+    )
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True),
+)
+async def imap_set_flags(
+    account_id: str,
+    folder: str,
+    uids: list[int],
+    ctx: Context,
+    mark_read: bool | None = None,
+    mark_flagged: bool | None = None,
+) -> str:
+    """Mark messages as read, unread, flagged, or unflagged."""
+    return await set_flags(
+        ctx.lifespan_context["accounts"],
+        account_id, folder, uids, mark_read, mark_flagged,
     )
 
 
