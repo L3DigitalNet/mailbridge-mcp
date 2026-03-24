@@ -16,7 +16,7 @@ import pytest
 
 from mailbridge_mcp.config import AccountConfig, ImapConfig, SmtpConfig
 from mailbridge_mcp.tools_read import get_message, get_thread, list_messages, search_messages
-from mailbridge_mcp.tools_write import delete_message, move_message, reply_tool, set_flags
+from mailbridge_mcp.tools_write import move_message, reply_tool, set_flags
 
 Envelope = namedtuple(
     "Envelope",

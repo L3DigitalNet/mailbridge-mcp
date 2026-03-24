@@ -107,7 +107,8 @@ class TestMessageSummaryMarkdown:
 
     def test_no_subject_shows_placeholder(self):
         messages = [
-            {"uid": 1, "from": "", "subject": None, "date": "", "is_read": False, "is_flagged": False}
+            {"uid": 1, "from": "", "subject": None, "date": "",
+             "is_read": False, "is_flagged": False}
         ]
         result = format_message_summary_markdown(messages)
         assert "(no subject)" in result

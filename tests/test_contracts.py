@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
@@ -27,7 +26,9 @@ EXPECTED_ANNOTATIONS = {
     "imap_send_email": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
     "imap_reply": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False},
     "imap_move_message": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True},
-    "imap_delete_message": {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True},
+    "imap_delete_message": {
+        "readOnlyHint": False, "destructiveHint": True, "idempotentHint": True,
+    },
     "imap_set_flags": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True},
 }
 
