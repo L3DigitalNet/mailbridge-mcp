@@ -1,0 +1,32 @@
+accounts:
+  - id: personal
+    label: "Personal (name@example.com)"
+    imap:
+      host: mail.example.com
+      port: 993
+      tls: true
+      username: name@example.com
+      password: "${PERSONAL_IMAP_PASSWORD}"    # resolved from env at startup
+    smtp:
+      host: mail.example.com
+      port: 587
+      starttls: true
+      username: name@example.com
+      password: "${PERSONAL_SMTP_PASSWORD}"
+    default_from: "Your Name <name@example.com>"
+
+  - id: work
+    label: "Work (you@company.com)"
+    imap:
+      host: imap.company.com
+      port: 993
+      tls: true
+      username: you@company.com
+      password: "${WORK_IMAP_PASSWORD}"
+    smtp:
+      host: smtp.company.com
+      port: 587
+      starttls: true
+      username: you@company.com
+      password: "${WORK_SMTP_PASSWORD}"
+    default_from: "Your Name <you@company.com>"
