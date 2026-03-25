@@ -9,14 +9,13 @@ from typing import Any
 import imapclient
 import structlog
 from fastmcp import FastMCP
+from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.context import Context
 from fastmcp.server.lifespan import lifespan
 from mcp.types import ToolAnnotations
-from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from mailbridge_mcp.auth import BearerAuthMiddleware
 from mailbridge_mcp.config import AccountConfig, Settings, load_accounts
 from mailbridge_mcp.tools_read import (
     get_message,
@@ -87,8 +86,23 @@ async def app_lifespan(server: Any) -> Any:
     yield {"accounts": accounts_map, "settings": settings}
 
 
+# GitHub OAuth for Claude.ai web access (handles full OAuth 2.1 flow)
+_github_client_id = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
+_github_client_secret = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "")
+
+auth_provider = (
+    GitHubProvider(
+        client_id=_github_client_id,
+        client_secret=_github_client_secret,
+        base_url=f"https://{os.getenv('MCP_PUBLIC_HOST', 'localhost')}",
+    )
+    if _github_client_id and _github_client_secret
+    else None
+)
+
 mcp = FastMCP(
     "mailbridge-mcp",
+    auth=auth_provider,
     lifespan=app_lifespan,
 )
 
@@ -290,11 +304,7 @@ async def imap_set_flags(
 
 
 def create_app() -> Any:
-    middleware = [Middleware(BearerAuthMiddleware, api_key=settings.mcp_api_key)]
-    http_app = mcp.http_app(
-        transport="streamable-http",
-        middleware=middleware,
-    )
+    http_app = mcp.http_app(transport="streamable-http")
     http_app.add_route("/health", health_check, methods=["GET"])
     return http_app
 
