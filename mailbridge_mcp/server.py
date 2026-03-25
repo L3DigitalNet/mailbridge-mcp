@@ -304,7 +304,10 @@ async def imap_set_flags(
 
 
 def create_app() -> Any:
-    http_app = mcp.http_app(transport="streamable-http")
+    # Mount MCP at root "/" so Claude.ai can find it without a subpath.
+    # Claude.ai probes POST / after OAuth, and the well-known metadata
+    # must be at /.well-known/oauth-protected-resource (not /mcp/...).
+    http_app = mcp.http_app(transport="streamable-http", path="/")
     http_app.add_route("/health", health_check, methods=["GET"])
     return http_app
 
