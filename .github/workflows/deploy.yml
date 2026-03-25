@@ -28,5 +28,5 @@ jobs:
               .venv/bin/pip install -e . --quiet &&
               systemctl restart mailbridge-mcp
             '
-            sleep 10
+            sleep 20
             pct exec 111 -- curl -sf http://localhost:8765/health || exit 1
