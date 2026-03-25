@@ -31,11 +31,20 @@ class RateLimiter:
         return True
 
 
+def extract_bare_address(addr: str) -> str:
+    """Extract bare email from 'Display Name <user@host>' or 'user@host' format."""
+    import email.utils
+
+    _name, bare = email.utils.parseaddr(addr)
+    return bare if bare else addr
+
+
 def validate_addresses(addresses: list[str]) -> None:
-    """Validate email addresses. Raises ValueError on invalid addresses."""
+    """Validate email addresses. Handles 'Display Name <addr>' format."""
     for addr in addresses:
+        bare = extract_bare_address(addr)
         try:
-            validate_email(addr, check_deliverability=False)
+            validate_email(bare, check_deliverability=False)
         except EmailNotValidError as e:
             raise ValueError(f"Invalid email address '{addr}': {e}") from e
 
@@ -96,7 +105,8 @@ async def send_email(
         references=references,
     )
 
-    recipients = list(to) + (cc or []) + (bcc or [])
+    # SMTP envelope needs bare addresses; MIME headers keep display names
+    recipients = [extract_bare_address(a) for a in list(to) + (cc or []) + (bcc or [])]
     await aiosmtplib.send(
         msg,
         hostname=account.smtp.host,

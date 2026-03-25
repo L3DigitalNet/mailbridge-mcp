@@ -135,18 +135,27 @@ async def list_folders(accounts: dict[str, AccountConfig], account_id: str) -> s
             folders = client.list_folders()
             result = []
             for flags, delimiter, name in folders:
-                status = client.folder_status(name, ["MESSAGES", "UNSEEN"])
                 flag_strs = [
                     f.decode("utf-8", errors="replace") if isinstance(f, bytes) else str(f)
                     for f in flags
                 ]
+                # Skip non-selectable folders (e.g. dovecot metadata, \Noselect)
+                if "\\Noselect" in flag_strs or "\\NonExistent" in flag_strs:
+                    continue
+                try:
+                    status = client.folder_status(name, ["MESSAGES", "UNSEEN"])
+                    msg_count = status.get(b"MESSAGES", 0)
+                    unread_count = status.get(b"UNSEEN", 0)
+                except Exception:
+                    msg_count = 0
+                    unread_count = 0
                 result.append(
                     {
                         "name": name,
                         "flags": flag_strs,
                         "delimiter": delimiter,
-                        "message_count": status.get(b"MESSAGES", 0),
-                        "unread_count": status.get(b"UNSEEN", 0),
+                        "message_count": msg_count,
+                        "unread_count": unread_count,
                     }
                 )
             return result
