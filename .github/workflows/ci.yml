@@ -21,6 +21,12 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Type check
+        env:
+          GITHUB_OAUTH_CLIENT_ID: test-ci-id
+          GITHUB_OAUTH_CLIENT_SECRET: test-ci-secret
         run: mypy mailbridge_mcp/
       - name: Test
+        env:
+          GITHUB_OAUTH_CLIENT_ID: test-ci-id
+          GITHUB_OAUTH_CLIENT_SECRET: test-ci-secret
         run: pytest --cov=mailbridge_mcp --cov-fail-under=35
