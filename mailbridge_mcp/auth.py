@@ -7,6 +7,11 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+# Paths that bypass Bearer auth: health check + OAuth discovery probes from MCP clients.
+# Claude.ai's remote MCP client probes /.well-known/ before sending Bearer tokens;
+# returning 401 on those paths triggers an OAuth flow loop. Let them 404 naturally.
+_AUTH_EXEMPT_PREFIXES = ("/health", "/.well-known/")
+
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: Any, api_key: str) -> None:
@@ -16,7 +21,8 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if request.url.path == "/health":
+        path = request.url.path
+        if any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
             return await call_next(request)
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer ") or not hmac.compare_digest(

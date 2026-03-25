@@ -72,3 +72,12 @@ def test_health_bypass_with_wrong_token(client: TestClient):
     """/health should work even if a bad token is sent."""
     resp = client.get("/health", headers={"Authorization": "Bearer wrong"})
     assert resp.status_code == 200
+
+
+def test_well_known_paths_bypass_auth(client: TestClient):
+    """OAuth discovery paths must not return 401 — MCP clients probe these."""
+    resp = client.get("/.well-known/oauth-protected-resource")
+    assert resp.status_code != 401  # 404 is fine, 401 triggers OAuth loop
+
+    resp = client.get("/.well-known/oauth-authorization-server")
+    assert resp.status_code != 401
