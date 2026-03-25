@@ -28,5 +28,11 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if not auth.startswith("Bearer ") or not hmac.compare_digest(
             auth[7:], self.api_key
         ):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            # WWW-Authenticate header tells MCP clients to use Bearer auth
+            # instead of falling back to OAuth discovery
+            return JSONResponse(
+                {"error": "Unauthorized"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return await call_next(request)
