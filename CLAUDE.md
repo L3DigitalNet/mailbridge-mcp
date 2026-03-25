@@ -86,3 +86,7 @@ These were established during design review and must be maintained:
 ## Deployment
 
 GitHub Actions CI (ruff + mypy + pytest) on push/PR. Deploy on merge to `main`: SSH into LXC via Tailscale, git pull, pip install, systemctl restart, verify `/health` returns 200.
+
+## TLS Notes
+
+**OCSP stapling is dead.** Let's Encrypt shut down their OCSP responders on 2025-08-06 and stopped including OCSP URLs in certs from 2025-05-07. The industry moved to CRLs. Do not reference OCSP stapling in docs or configs. Caddy auto-TLS still works, it just no longer staples OCSP responses.
