@@ -8,7 +8,7 @@ Claude.ai ──HTTPS──> Nginx (Proxmox host) ──HTTP:8765──> mailbri
                                                             └── SMTP/TLS ──> mail servers
 ```
 
-Python 3.13, FastMCP, bearer auth, structlog JSON logging. Runs as a systemd service inside a dedicated Proxmox LXC container (Debian 13 Trixie), proxied through Nginx with TLS.
+Python 3.13, FastMCP 3.x, GitHub OAuth (for Claude.ai web access), structlog JSON logging. Runs as a systemd service inside a dedicated Proxmox LXC container (Debian 13 Trixie), proxied through Nginx with TLS.
 
 ## Tools
 
@@ -43,8 +43,18 @@ uv pip install -e ".[dev]"
 Copy and edit the config files:
 
 ```bash
-cp .env.example .env          # set MCP_API_KEY and mail passwords
+cp .env.example .env
 cp config/accounts.yaml.example config/accounts.yaml
+# Edit both files with your credentials
+```
+
+The server requires GitHub OAuth credentials to start (it refuses to run without authentication):
+
+```bash
+# Set these in .env:
+# GITHUB_OAUTH_CLIENT_ID=<your GitHub OAuth App client ID>
+# GITHUB_OAUTH_CLIENT_SECRET=<your GitHub OAuth App client secret>
+# MCP_PUBLIC_HOST=<your public hostname>
 ```
 
 Run the server:
@@ -55,13 +65,28 @@ python -m mailbridge_mcp.server
 # Health check: curl http://localhost:8765/health
 ```
 
+## Authentication
+
+Claude.ai's web interface requires OAuth 2.1 for remote MCP servers (it does not support raw Bearer tokens). This server uses FastMCP's built-in `GitHubProvider` to handle the OAuth flow.
+
+**Setup:**
+
+1. Create a [GitHub OAuth App](https://github.com/settings/developers) with callback URL set to `https://<your-host>/auth/callback`
+2. Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in `.env`
+3. When connecting from Claude.ai, enter just the base URL (e.g., `https://mcp.example.com`) - no `/mcp` suffix
+4. Claude.ai redirects you through GitHub to authorize, then you're connected
+
+**For Claude Code:** Use `claude mcp add` with `--transport http` and `--header` for direct Bearer token access.
+
 ## Configuration
 
 ### Environment variables (`.env`)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MCP_API_KEY` | (required) | Bearer token Claude.ai sends in the `Authorization` header |
+| `GITHUB_OAUTH_CLIENT_ID` | (required) | GitHub OAuth App client ID |
+| `GITHUB_OAUTH_CLIENT_SECRET` | (required) | GitHub OAuth App client secret |
+| `MCP_PUBLIC_HOST` | (required) | Public hostname for OAuth callbacks |
 | `MCP_HOST` | `0.0.0.0` | Listen address |
 | `MCP_PORT` | `8765` | Listen port |
 | `IMAP_TIMEOUT` | `30` | Seconds per IMAP operation before timeout |
@@ -101,23 +126,22 @@ The design doc (`docs/mailbridge-mcp-design.md`) has full deployment instruction
 
 2. **Install:** Clone the repo to `/opt/mailbridge-mcp`, create a venv, `pip install -e .`, deploy `.env` and `accounts.yaml` with `chmod 600`.
 
-3. **Systemd service:** The unit runs as a dedicated `imapmcp` user:
+3. **Systemd service:** The unit runs as a dedicated `mailbridge` user:
    ```ini
    ExecStart=/opt/mailbridge-mcp/.venv/bin/python -m mailbridge_mcp.server
    ```
 
-4. **Nginx reverse proxy** on the Proxmox host forwards HTTPS to the container:
+4. **Nginx reverse proxy** on the Proxmox host forwards HTTPS to the container. Disable global rate limiting for this vhost (OAuth flow is bursty):
    ```nginx
    location / {
+       limit_req zone=api burst=200 nodelay;
        proxy_pass http://<lxc-ip>:8765;
-       proxy_buffering off;    # required for SSE streaming
+       proxy_buffering off;
        proxy_read_timeout 300s;
    }
    ```
 
-5. **Connect Claude.ai:** Settings > Integrations > Add MCP Server
-   - URL: `https://your-domain.com/mcp`
-   - Header: `Authorization: Bearer <MCP_API_KEY>`
+5. **Connect Claude.ai:** Settings > Integrations > Add custom integration. Enter your base URL (e.g., `https://mcp.example.com`). Claude.ai redirects to GitHub OAuth to authorize.
 
 ### CI/CD
 
@@ -135,17 +159,21 @@ pytest -k "test_send"                 # single test by name
 pytest --cov=mailbridge_mcp           # coverage report
 ```
 
-107 tests covering config, IMAP client, SMTP client, formatters, auth middleware, tool behavior, and MCP contract verification.
+108 tests covering config, IMAP client, SMTP client, formatters, auth middleware, tool behavior, MCP contract verification, and input validation.
 
 ## Security
 
-- Bearer token validated with `hmac.compare_digest` (timing-safe)
-- `/health` endpoint bypasses auth for monitoring
+- GitHub OAuth 2.1 via FastMCP's `GitHubProvider` (for Claude.ai web access)
+- Server refuses to start without authentication configured
 - Credentials in environment variables only, never in code or YAML
-- SMTP rate limiting prevents runaway sends
+- Error messages sanitized: email addresses, hostnames, and IPs stripped before returning to the model
+- IMAP folder names validated against safe character regex; search queries length-limited
+- Email header injection prevented: subject and reply_to reject CR/LF
+- SMTP rate limiting prevents runaway sends (10/min default)
 - Delete operations move to Trash; `EXPUNGE` is never called
 - Email bodies truncated at 50,000 characters to protect context windows
 - Attachment binary content is never returned (metadata only)
+- UID fields validated (positive integers only; lists capped at 1,000)
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
