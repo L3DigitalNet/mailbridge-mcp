@@ -1,6 +1,10 @@
 # Worktrees
 .worktrees/
 
+# Credentials — only .example files should be committed
+accounts.yaml
+config/accounts.yaml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

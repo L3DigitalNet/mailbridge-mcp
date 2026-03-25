@@ -86,18 +86,21 @@ async def app_lifespan(server: Any) -> Any:
     yield {"accounts": accounts_map, "settings": settings}
 
 
-# GitHub OAuth for Claude.ai web access (handles full OAuth 2.1 flow)
+# GitHub OAuth for Claude.ai web access (handles full OAuth 2.1 flow).
+# Server refuses to start without auth configured — no unauthenticated mode.
 _github_client_id = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
 _github_client_secret = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "")
 
-auth_provider = (
-    GitHubProvider(
-        client_id=_github_client_id,
-        client_secret=_github_client_secret,
-        base_url=f"https://{os.getenv('MCP_PUBLIC_HOST', 'localhost')}",
+if not (_github_client_id and _github_client_secret):
+    raise RuntimeError(
+        "GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET must be set. "
+        "The server cannot run without authentication."
     )
-    if _github_client_id and _github_client_secret
-    else None
+
+auth_provider = GitHubProvider(
+    client_id=_github_client_id,
+    client_secret=_github_client_secret,
+    base_url=f"https://{os.getenv('MCP_PUBLIC_HOST', 'localhost')}",
 )
 
 mcp = FastMCP(

@@ -57,10 +57,28 @@ def pagination_envelope(
     }
 
 
+def _sanitize_error_message(message: str) -> str:
+    """Strip credentials, hostnames, and usernames from error messages.
+
+    IMAP/SMTP libraries include server details and usernames in exceptions.
+    Never expose these to the MCP client (and therefore to the model context).
+    """
+    import re
+
+    # Strip email addresses that appear in auth error messages
+    message = re.sub(r"[\w.+-]+@[\w.-]+", "<redacted>", message)
+    # Strip hostnames/IPs that look like server addresses
+    message = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "<redacted>", message)
+    message = re.sub(r"\b[\w.-]+\.(com|net|org|io|dev)\b", "<redacted>", message)
+    # Strip anything in single quotes (often usernames/paths in errors)
+    message = re.sub(r"'[^']*@[^']*'", "'<redacted>'", message)
+    return message
+
+
 def error_response(code: str, message: str, account_id: str = "") -> str:
-    """Build a structured error JSON string."""
+    """Build a structured error JSON string. Sanitizes the message to prevent credential leaks."""
     return json.dumps({
         "error": code,
-        "message": message,
+        "message": _sanitize_error_message(message),
         "account_id": account_id,
     })
