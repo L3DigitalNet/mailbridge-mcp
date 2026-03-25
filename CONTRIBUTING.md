@@ -15,9 +15,16 @@ uv pip install -e ".[dev]"
 
 1. Create a branch from `main`
 2. Make your changes
-3. Run the checks: `ruff check . && mypy mailbridge_mcp/ && pytest`
-4. Commit with a descriptive message
-5. Open a PR against `main`
+3. Set the required OAuth env vars (any non-empty value works for testing):
+   ```bash
+   export GITHUB_OAUTH_CLIENT_ID=test
+   export GITHUB_OAUTH_CLIENT_SECRET=test
+   ```
+4. Run the checks: `ruff check . && mypy mailbridge_mcp/ && pytest`
+5. Commit with a descriptive message
+6. Open a PR against `main`
+
+The server module (`server.py`) raises `RuntimeError` at import time if `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` are missing, which causes test collection to fail. The values don't need to be real credentials for running tests.
 
 ## Code Standards
 

@@ -778,3 +778,37 @@ Claude.ai will enumerate available tools on connect.
 - **Tool-level tests** (`pytest-asyncio`): test each MCP tool function with mocked IMAP/SMTP clients. Verify annotations, input validation, pagination, and response shapes.
 - **No integration tests against live IMAP servers in CI.** Manual smoke tests against a real account during development only.
 - **Coverage target:** aim for 90%+ on `config.py`, `imap_client.py`, `smtp_client.py`; 80%+ overall.
+
+---
+
+## 17. Post-Implementation Changes
+
+This section documents deviations from the original design that occurred during implementation (completed 2026-03-24).
+
+### Authentication: GitHub OAuth instead of Bearer token
+
+The design specified `BearerAuthMiddleware` with a shared `MCP_API_KEY`. The implementation uses `GitHubProvider` from `fastmcp.server.auth.providers.github` for full OAuth 2.1 flow. Claude.ai's remote MCP client requires OAuth for web access. The server refuses to start without `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` env vars. `BearerAuthMiddleware` still exists in `auth.py` but is not wired into the running server.
+
+### MCP mounted at root path `/` instead of `/mcp`
+
+The design (section 13) specified the Claude.ai connection URL as `https://mailbridge.l3digital.net/mcp`. Claude.ai probes `POST /` after OAuth and expects `/.well-known/oauth-protected-resource` at the root. The FastMCP app is mounted via `mcp.http_app(transport="streamable-http", path="/")`.
+
+### Tools split into `tools_read.py` and `tools_write.py`
+
+The design specified a single `server.py` for tool registration. The implementation splits tool logic into `tools_read.py` (6 read-only tools) and `tools_write.py` (5 write tools). `server.py` remains the entrypoint but delegates to these modules. Tool registration (decorators, annotations) stays in `server.py`.
+
+### IMAP rate limiting added
+
+Not in the original design. Per-account sliding window rate limiter (default 60 ops/min, configurable via `IMAP_RATE_LIMIT` env var). Each IMAP tool call opens a fresh TCP+TLS connection, so this prevents overwhelming mail servers under heavy use. Reuses the `RateLimiter` class from `smtp_client.py`.
+
+### Service user is `mailbridge` not `imapmcp`
+
+The design (section 12.2) specified `useradd ... imapmcp`. The deployed service runs as user `mailbridge`. The systemd unit, file ownership, and permissions all use `mailbridge`.
+
+### `fastmcp` is a separate dependency from `mcp[cli]`
+
+The design (section 4) listed `mcp[cli]>=1.9` as providing FastMCP. In practice, `fastmcp>=2.0` is a separate package. Both `mcp[cli]` and `fastmcp` appear in `pyproject.toml` dependencies.
+
+### Security hardening (2026-03-24 audit)
+
+Input validation, error sanitization, and mandatory auth were added post-initial implementation. See `SECURITY.md` for the full list: folder name regex validation, search query length limits, header injection prevention, error message sanitization, and UID bounds/list-length enforcement.

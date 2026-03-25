@@ -14,8 +14,8 @@ The authoritative specification is `docs/mailbridge-mcp-design.md`. All implemen
 # Install (editable, with dev deps)
 pip install -e ".[dev]"
 
-# Run server locally
-python -m mailbridge_mcp.server
+# Run server locally (requires GitHub OAuth env vars)
+GITHUB_OAUTH_CLIENT_ID=xxx GITHUB_OAUTH_CLIENT_SECRET=xxx python -m mailbridge_mcp.server
 
 # Lint + format
 ruff check .
@@ -24,8 +24,8 @@ ruff format .
 # Type check
 mypy mailbridge_mcp/
 
-# Test
-pytest
+# Test (OAuth env vars required — server module raises RuntimeError at import without them)
+GITHUB_OAUTH_CLIENT_ID=test GITHUB_OAUTH_CLIENT_SECRET=test pytest
 pytest tests/test_config.py              # single file
 pytest tests/test_tools.py -k "test_send" # single test by name
 pytest --cov=mailbridge_mcp              # with coverage
@@ -37,11 +37,11 @@ pytest --cov=mailbridge_mcp              # with coverage
 
 ```
 Claude.ai ──HTTPS──▶ Nginx (Proxmox host) ──HTTP:8765──▶ FastMCP server (LXC)
-                                                            ├── IMAP/TLS ──▶ mail servers
-                                                            └── SMTP/TLS ──▶ mail servers
+                        (limit_req burst=200)                ├── IMAP/TLS ──▶ mail servers
+                                                             └── SMTP/TLS ──▶ mail servers
 ```
 
-**Request flow:** Claude.ai sends Bearer-authenticated HTTP to the FastMCP ASGI app. The `BearerAuthMiddleware` validates the token (timing-safe via `hmac.compare_digest`), then FastMCP dispatches to the matching tool function. `/health` bypasses auth.
+**Request flow:** Claude.ai initiates a GitHub OAuth flow (via `GitHubProvider` from `fastmcp.server.auth.providers.github`). After OAuth completes, Claude.ai sends POST requests to the root path `/`. The MCP app is mounted at `path="/"` (not `/mcp`) because Claude.ai probes `POST /` and expects `/.well-known/oauth-protected-resource` at the root. `/health` bypasses auth.
 
 **IMAP is sync, server is async:** `imapclient` is synchronous. Every IMAP operation runs inside `asyncio.get_running_loop().run_in_executor(None, ...)` wrapped with `asyncio.wait_for` for timeout enforcement. Each tool call opens a fresh connection (connect, operate, disconnect) — no persistent connections or pooling.
 
@@ -63,19 +63,25 @@ These were established during design review and must be maintained:
 
 **IMAP async wrapper** — all IMAP operations go through `run_imap()` which handles executor dispatch, 30s timeout, and single retry on `ConnectionError`/`OSError`. Auth failures and timeouts are not retried.
 
+**IMAP rate limiting** — per-account sliding window counter (default 60 ops/min via `IMAP_RATE_LIMIT` env var). Each tool call opens a fresh TCP+TLS connection, so this prevents overwhelming mail servers. Raises `RuntimeError` when exceeded.
+
 **UIDVALIDITY** — capture on folder SELECT, include in list/search responses. On UID-based operations, compare current UIDVALIDITY against the listing epoch. Return `IMAP_UIDVALIDITY_CHANGED` on mismatch rather than operating on the wrong message.
 
 **SMTP rate limiting** — shared in-memory sliding window counter (default 10/min via `SMTP_RATE_LIMIT`). Applies to both `imap_send_email` and `imap_reply`. Return `SMTP_RATE_LIMITED` when exceeded.
 
-**Error responses** — structured JSON: `{error: "ERROR_CODE", message: "...", account_id: "..."}`. All error codes are enumerated in the design doc section 10.
+**Tool invocation logging** — MCP middleware (`_log_tool_calls`) logs every tool call start/complete/error with `tool`, `account_id`, `duration_ms`, and `result_size`. Passwords filtered from logged params.
 
-**Logging** — `structlog` with JSON output to stdout (journald captures it). Bind `tool`, `account_id`, `duration_ms` on every tool invocation. Sanitize params (no passwords in logs).
+**Error sanitization** — `_sanitize_error_message()` in `formatters.py` strips email addresses, hostnames, and IPs from error messages before returning them to the model. IMAP/SMTP libraries leak server details in exceptions.
+
+**Input validation** — Pydantic models in `models.py` enforce: folder names via safe-character regex (max 255 chars), search queries max 500 chars, UIDs `ge=1`, UID lists max 1000, subject/reply_to reject CR/LF (header injection prevention).
+
+**Error responses** — structured JSON: `{error: "ERROR_CODE", message: "...", account_id: "..."}`. All error codes are enumerated in the design doc section 10.
 
 **MCP tool annotations** — every tool must set `readOnlyHint`, `destructiveHint`, `idempotentHint`. Read tools are `readOnlyHint: true`. Only `imap_delete_message` is `destructiveHint: true`.
 
 ## Testing
 
-Mock `imapclient` and `aiosmtplib` at the library boundary. No live IMAP server in CI. Coverage target: 90%+ on core modules (`config.py`, `imap_client.py`, `smtp_client.py`), 80%+ overall.
+108 tests. Mock `imapclient` and `aiosmtplib` at the library boundary. No live IMAP server in CI. Coverage target: 90%+ on core modules (`config.py`, `imap_client.py`, `smtp_client.py`), 80%+ overall. Tests require `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` env vars (any non-empty value works for test runs).
 
 ## Deployment
 
