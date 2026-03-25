@@ -7,18 +7,19 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    needs: []
     steps:
-      - name: Deploy to LXC via Tailscale
+      - name: Deploy to LXC via Proxmox host
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.LXC_HOST }}
           username: ${{ secrets.LXC_USER }}
           key: ${{ secrets.LXC_SSH_KEY }}
           script: |
-            cd /opt/mailbridge-mcp
-            git pull
-            .venv/bin/pip install -e .
-            sudo systemctl restart mailbridge-mcp
-            sleep 3
-            curl -sf http://localhost:8765/health || exit 1
+            pct exec 111 -- bash -c '
+              cd /opt/mailbridge-mcp &&
+              git pull &&
+              .venv/bin/pip install -e . --quiet &&
+              systemctl restart mailbridge-mcp
+            '
+            sleep 10
+            pct exec 111 -- curl -sf http://localhost:8765/health || exit 1

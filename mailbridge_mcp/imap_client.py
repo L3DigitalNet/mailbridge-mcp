@@ -7,8 +7,23 @@ from contextlib import contextmanager
 from typing import Any
 
 import imapclient
+import structlog
 
 from mailbridge_mcp.config import AccountConfig
+from mailbridge_mcp.smtp_client import RateLimiter
+
+log = structlog.get_logger()
+
+# Per-account IMAP rate limiters: prevent overwhelming mail servers with connections.
+# Default 60 ops/min per account (each op opens a fresh TCP+TLS connection).
+_imap_rate_limiters: dict[str, RateLimiter] = {}
+_imap_rate_limit = int(os.getenv("IMAP_RATE_LIMIT", "60"))
+
+
+def _get_imap_limiter(account_id: str) -> RateLimiter:
+    if account_id not in _imap_rate_limiters:
+        _imap_rate_limiters[account_id] = RateLimiter(max_per_minute=_imap_rate_limit)
+    return _imap_rate_limiters[account_id]
 
 
 @contextmanager
@@ -39,7 +54,12 @@ async def run_imap(
 
     Retries once on ConnectionError/OSError (transient network failures).
     Auth failures, timeouts, and IMAP protocol errors are NOT retried.
+    Rate-limited per account (default 60 ops/min).
     """
+    limiter = _get_imap_limiter(account.id)
+    if not limiter.check():
+        raise RuntimeError(f"IMAP rate limit exceeded for account {account.id}")
+
     loop = asyncio.get_running_loop()
     timeout = int(os.getenv("IMAP_TIMEOUT", "30"))
 

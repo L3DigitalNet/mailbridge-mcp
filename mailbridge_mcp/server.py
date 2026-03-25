@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time as _time
 from pathlib import Path
 from typing import Any
 
@@ -110,11 +111,52 @@ mcp = FastMCP(
 )
 
 
+# --- Tool invocation logging via MCP middleware ---
+
+
+async def _log_tool_calls(request: Any, call_next: Any) -> Any:
+    """Log every tool invocation with tool name, duration, and result size."""
+    tool_name = getattr(request, "tool_name", None) or getattr(request, "name", "unknown")
+    params = getattr(request, "arguments", {}) or {}
+    account_id = params.get("account_id", "") if isinstance(params, dict) else ""
+    safe_params = (
+        {k: v for k, v in params.items() if "password" not in k.lower()}
+        if isinstance(params, dict) else {}
+    )
+
+    log.info("tool_start", tool=tool_name, account_id=account_id, params=safe_params)
+    start = _time.monotonic()
+    try:
+        result = await call_next(request)
+        duration_ms = round((_time.monotonic() - start) * 1000)
+        result_size = len(str(result)) if result else 0
+        log.info("tool_complete", tool=tool_name, account_id=account_id,
+                 duration_ms=duration_ms, result_size=result_size)
+        return result
+    except Exception as e:
+        duration_ms = round((_time.monotonic() - start) * 1000)
+        log.error("tool_error", tool=tool_name, account_id=account_id,
+                  duration_ms=duration_ms, error=str(type(e).__name__))
+        raise
+
+
+mcp.add_middleware(_log_tool_calls)
+
+
 # --- Health check endpoint (not an MCP tool, not behind auth) ---
 
 
 async def health_check(request: Request) -> JSONResponse:
-    return JSONResponse({"status": "ok"})
+    accounts: dict[str, AccountConfig] = {}
+    try:
+        # Access lifespan context via app state if available
+        app_state = getattr(request.app, "state", None)
+        if app_state and hasattr(app_state, "lifespan_context"):
+            accounts = app_state.lifespan_context.get("accounts", {})
+    except Exception:
+        pass
+    account_status = {aid: "configured" for aid in accounts}
+    return JSONResponse({"status": "ok", "accounts": account_status})
 
 
 # --- Read tools ---
