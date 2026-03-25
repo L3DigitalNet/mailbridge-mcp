@@ -140,7 +140,7 @@ async def _log_tool_calls(request: Any, call_next: Any) -> Any:
         raise
 
 
-mcp.add_middleware(_log_tool_calls)
+mcp.add_middleware(_log_tool_calls)  # type: ignore[arg-type]
 
 
 # --- Health check endpoint (not an MCP tool, not behind auth) ---

@@ -8,11 +8,18 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-client-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
       - name: Deploy to LXC via Proxmox host
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.LXC_HOST }}
-          username: ${{ secrets.LXC_USER }}
+          host: 100.92.153.67
+          username: root
           key: ${{ secrets.LXC_SSH_KEY }}
           script: |
             pct exec 111 -- bash -c '
